@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 from aws_cdk import (
     aws_ecr as ecr,
     aws_ecr_assets as ecr_assets,
@@ -13,7 +14,7 @@ class EcrRepositoryStack(cdk.Stack):
         super().__init__(scope, id, **kwargs)
         
         # Create the ECR repository
-        ecr.Repository(self, 
+        repository = ecr.Repository(self, 
                        "ConsigFreeswitchMrfRepo",
                        repository_name="consig-freeswitch-mrf")
 
@@ -25,13 +26,19 @@ class EcrRepositoryStack(cdk.Stack):
                                     "TARGETARCH": "x86_64",
                                 },
                             )
+        # Get the GitHub commit hash from the environment variable
+        github_sha = os.getenv('GITHUB_SHA', 'local')
+        github_branch = os.getenv('GITHUB_REF_NAME', 'local')
         
-        # Copy from cdk docker image asset to another ECR.
-        ecrdeploy.ECRDeployment(self, "FreeswitchImage",
-            src=ecrdeploy.DockerImageName(freeswitch_image_asset.image_uri),
-            dest=ecrdeploy.DockerImageName(f"{Stack.of(self).account}.dkr.ecr.{Stack.of(self).region}.amazonaws.com/consig-freeswitch-mrf:latest")
-        )
+        # Deploy the Docker image to the ECR repository with both the commit hash and branch name as tags
+        ecrdeploy.ECRDeployment(self, "DeployDockerImageSHA",
+                      src=ecrdeploy.DockerImageName(freeswitch_image_asset.image_uri),
+                      dest=ecrdeploy.DockerImageName(f"{repository.repository_uri}:{github_sha}"))
 
+        ecrdeploy.ECRDeployment(self, "DeployDockerImageBranch",
+                      src=ecrdeploy.DockerImageName(freeswitch_image_asset.image_uri),
+                      dest=ecrdeploy.DockerImageName(f"{repository.repository_uri}:{github_branch}"))
+        
 app = cdk.App()
 
 #
